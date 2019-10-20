@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "767363190972",
+    "firebase_url": "https://marker-aad3c.firebaseio.com",
+    "project_id": "marker-aad3c",
+    "storage_bucket": "marker-aad3c.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:767363190972:android:63131dd39930064332c0b9",
+        "android_client_info": {
+          "package_name": "com.infiniteMonkey.marker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "767363190972-g3dtd6109u305c0fucbpua8filavkok2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWTDKGj4rQI59ICzWkRHlSinUW9wOoXbI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "767363190972-g3dtd6109u305c0fucbpua8filavkok2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
