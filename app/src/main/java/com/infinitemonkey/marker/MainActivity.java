@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 //import android.support.design.widget.Snackbar;
 import com.google.android.material.snackbar.Snackbar;
 //import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -32,6 +33,7 @@ import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.ArSceneView;
 import com.google.ar.sceneform.HitTestResult;
 import com.google.ar.sceneform.Node;
+import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.rendering.ViewRenderable;
 
@@ -40,10 +42,16 @@ import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
-/**
- * This is a simple example that shows how to create an augmented reality (AR) application using the
- * ARCore and Sceneform APIs.
- */
+
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
+import com.google.firebase.database.ValueEventListener;
+
+
 public class MainActivity extends AppCompatActivity {
     private static final int RC_PERMISSIONS = 0x123;
     private boolean cameraPermissionRequested;
@@ -73,16 +81,16 @@ public class MainActivity extends AppCompatActivity {
     private ViewRenderable[] vrs;
     private Node[] nodes = new Node[MAX_MSG];
 
-    float messageSizeX = 1.0f;
-    float emssageSizeY = 1.0f;
-    float messageMarginX = 0.5f;
-    float messageMarginY = 0.5f;
     float viewRadius = 3.0f;
-    float depthRange = 1.0f;
     private Button postButton;
     EditText textInput;
     Random r = new Random();
-    float yOffset = 0.25f;
+
+    private final static String DEFAULT_LOCATION = "default location";
+    FirebaseDatabase database;
+    private DatabaseReference databaseReference;
+    private ValueEventListener mMessagesListener;
+    private String locationKey;
 
     @Override
     @SuppressWarnings({"AndroidApiChecker", "FutureReturnValueIgnored"})
@@ -169,9 +177,11 @@ public class MainActivity extends AppCompatActivity {
                 onPost();
             }
         });
-        postButton.setEnabled(false);
+        //postButton.setEnabled(false);
         textInput = findViewById(R.id.text_input);
         initViewRenderables();
+
+        database = FirebaseDatabase.getInstance();
     }
 
 
@@ -266,6 +276,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /* BEGIN AR CORE STUFF */
+
     private void onSingleTap(MotionEvent tap) {
 
         Frame frame = arSceneView.getArFrame();
@@ -285,14 +297,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String getMessageKey() {
-        // idealy, this will return lat/long as a string.
-        return "message";
-    }
 
     private void onPost() {
         // this is all testing nonsense for now
-        postMessage();
+        //postMessage();
+        sendToServer("please work");
     }
 
     private void postMessage() {
@@ -316,6 +325,7 @@ public class MainActivity extends AppCompatActivity {
 
             return;
         }
+
 
 
         ViewRenderable vr = vrs[msgCount];
@@ -368,11 +378,14 @@ public class MainActivity extends AppCompatActivity {
                     .show();
 
             messageNode.setLocalPosition(new Vector3(randX, randY, randZ));
+            // need to set world rotation up here
 
             msgCount++;
             if (msgCount >= MAX_MSG) {
                 msgCount = 0;
             }
+
+
         }
     }
 
@@ -495,4 +508,53 @@ public class MainActivity extends AppCompatActivity {
                         });
 
     }
+
+    /* END AR CORE STUFF */
+
+
+
+    /* BEGIN FIREBASE STUFF */
+    private void sendToServer(String value) {
+        setLocation();
+        databaseReference.setValue(value);
+        databaseReference.addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                // This method is called once with the initial value and again
+                // whenever data at this location is updated.
+                String value = dataSnapshot.getValue(String.class);
+                Toast.makeText(getApplicationContext(), "Message from server: " + value, Toast.LENGTH_LONG).show();
+                //updateList(value);
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                // Failed to read value
+                System.out.println("Failed to read value. " + error.toException());
+            }
+        });
+    }
+
+
+    private void setLocation() {
+        //return MSGKEY;
+        String location = "message";
+        location += msgCount;
+
+        try {
+            database = FirebaseDatabase.getInstance();
+            databaseReference = database.getReference(location);
+        } catch(Exception e) {
+            Toast.makeText(this, "Database exception caught!" , Toast.LENGTH_LONG);
+            Toast.makeText(this, e.toString(), Toast.LENGTH_LONG);
+        }
+    }
+
+    private String getMessageKey() {
+        // idealy, this will return lat/long as a string.
+        return DEFAULT_LOCATION;
+    }
+
+
+    /* END FIREBASE STUFF */
 }
