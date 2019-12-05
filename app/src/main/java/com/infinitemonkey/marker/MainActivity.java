@@ -177,7 +177,7 @@ public class MainActivity extends AppCompatActivity {
                 onPost();
             }
         });
-        //postButton.setEnabled(false);
+        postButton.setEnabled(false);
         textInput = findViewById(R.id.text_input);
         initViewRenderables();
 
@@ -301,33 +301,10 @@ public class MainActivity extends AppCompatActivity {
     private void onPost() {
         // this is all testing nonsense for now
         //postMessage();
-        sendToServer("please work");
+        sendToServer();
     }
 
-    private void postMessage() {
-        String fromInput = textInput.getText().toString();
-        String messageText = null;
-
-        if(fromInput != null && fromInput.length() > 0) {
-            messageText = fromInput;
-
-            if(msgCount >= MAX_MSG) {
-
-            }
-
-            Long time = java.lang.System.currentTimeMillis();
-            messageToTime.put(messageText, time);
-        } else {
-            //messageText = "Test Message, Time: " + java.lang.System.currentTimeMillis();
-            Toast.makeText(
-                    this, "Please enter a message to post in the text box!", Toast.LENGTH_LONG)
-                    .show();
-
-            return;
-        }
-
-
-
+    private void postMessage(String messageText) {
         ViewRenderable vr = vrs[msgCount];
         View v = vr.getView();
         LinearLayout l = (LinearLayout) v;
@@ -390,18 +367,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean createAnchor(MotionEvent tap, Frame frame) {
+        boolean created = false;
         if (tap != null && frame.getCamera().getTrackingState() == TrackingState.TRACKING) {
-
             for (HitResult hit : frame.hitTest(tap)) {
                 if (anchor == null || anchorNode == null) {
                     anchor = hit.createAnchor();
                     anchorNode = new AnchorNode(anchor);
                     anchorNode.setParent(arSceneView.getScene());
-                    return true;
+                    created = true;
+                    initValues();
+                    break;
                 }
             }
+
+            // init messages here
         }
-        return false;
+        return created;
     }
 
 
@@ -514,17 +495,32 @@ public class MainActivity extends AppCompatActivity {
 
 
     /* BEGIN FIREBASE STUFF */
-    private void sendToServer(String value) {
+    private void sendToServer() {
+        String fromInput = textInput.getText().toString();
+        String messageText = null;
+
+        if(fromInput != null && fromInput.length() > 0) {
+            messageText = fromInput;
+            Long time = java.lang.System.currentTimeMillis();
+            messageToTime.put(messageText, time);
+        } else {
+            Toast.makeText(
+                    this, "Please enter a message to post in the text box!", Toast.LENGTH_LONG)
+                    .show();
+            return;
+        }
+
         setLocation();
-        databaseReference.setValue(value);
+        databaseReference.setValue(messageText);
+
+        /*
         databaseReference.addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot dataSnapshot) {
-                // This method is called once with the initial value and again
-                // whenever data at this location is updated.
                 String value = dataSnapshot.getValue(String.class);
                 Toast.makeText(getApplicationContext(), "Message from server: " + value, Toast.LENGTH_LONG).show();
                 //updateList(value);
+                postMessage(value);
             }
 
             @Override
@@ -533,12 +529,44 @@ public class MainActivity extends AppCompatActivity {
                 System.out.println("Failed to read value. " + error.toException());
             }
         });
+
+         */
     }
+
+    private void initValues() {
+        for(int i = 0; i < MAX_MSG; i++) {
+            String location = getMessageKey();  // this should be changed w/ lat/long
+            location += i;
+            database = FirebaseDatabase.getInstance();
+            databaseReference = database.getReference(location);
+            databaseReference.addValueEventListener(new ValueEventListener() {
+                @Override
+                public void onDataChange(DataSnapshot dataSnapshot) {
+                    // This method is called once with the initial value and again
+                    // whenever data at this location is updated.
+                    String s = (String) dataSnapshot.getValue(String.class);
+                    //Log.d(TAG, "Value is: " + value);
+                    //Toast.makeText(getApplicationContext(), "Message from server: " + value, Toast.LENGTH_LONG).show();
+                    //updateList(value);
+                    if(s != null && s.length() > 0) {
+                        postMessage(s);
+                    }
+                }
+
+                @Override
+                public void onCancelled(DatabaseError error) {
+                    // Failed to read value
+                    //Log.w(TAG, "Failed to read value.", error.toException());
+                }
+            });
+        }
+    }
+
 
 
     private void setLocation() {
         //return MSGKEY;
-        String location = "message";
+        String location = getMessageKey();
         location += msgCount;
 
         try {
