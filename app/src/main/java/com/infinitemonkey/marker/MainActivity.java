@@ -2,6 +2,10 @@ package com.infinitemonkey.marker;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.Context;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Bundle;
 //import android.support.annotation.NonNull;
 import androidx.annotation.NonNull;
@@ -86,11 +90,17 @@ public class MainActivity extends AppCompatActivity {
     EditText textInput;
     Random r = new Random();
 
-    private final static String DEFAULT_LOCATION = "default location";
+    // database stuff
+    private final static String DEFAULT_LOCATION = "DEFAULT LOCATION";
     FirebaseDatabase database;
     private DatabaseReference databaseReference;
-    private ValueEventListener mMessagesListener;
-    private String locationKey;
+
+    // maps stuff
+    Location mBestReading = null;
+    LocationManager mLocationManager = null;
+    LocationListener mLocationListener = null;
+    boolean locationProvided = false;
+
 
     @Override
     @SuppressWarnings({"AndroidApiChecker", "FutureReturnValueIgnored"})
@@ -182,6 +192,8 @@ public class MainActivity extends AppCompatActivity {
         initViewRenderables();
 
         database = FirebaseDatabase.getInstance();
+        mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        locationProvided = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
     }
 
 
@@ -299,9 +311,15 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void onPost() {
-        // this is all testing nonsense for now
-        //postMessage();
         sendToServer();
+        /*
+        String l = getMessageKey();
+        if(l!=null) {
+            Toast.makeText(this, "Location: " + l, Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, "Location Not Found ", Toast.LENGTH_LONG).show();
+        }
+         */
     }
 
     private void postMessage(String messageText) {
@@ -379,8 +397,6 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
             }
-
-            // init messages here
         }
         return created;
     }
@@ -510,8 +526,9 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        setLocation();
-        databaseReference.setValue(messageText);
+        if(setLocation()) {
+            databaseReference.setValue(messageText);
+        }
 
         /*
         databaseReference.addValueEventListener(new ValueEventListener() {
@@ -534,53 +551,89 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initValues() {
-        for(int i = 0; i < MAX_MSG; i++) {
-            String location = getMessageKey();  // this should be changed w/ lat/long
-            location += i;
-            database = FirebaseDatabase.getInstance();
-            databaseReference = database.getReference(location);
-            databaseReference.addValueEventListener(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    // This method is called once with the initial value and again
-                    // whenever data at this location is updated.
-                    String s = (String) dataSnapshot.getValue(String.class);
-                    //Log.d(TAG, "Value is: " + value);
-                    //Toast.makeText(getApplicationContext(), "Message from server: " + value, Toast.LENGTH_LONG).show();
-                    //updateList(value);
-                    if(s != null && s.length() > 0) {
-                        postMessage(s);
-                    }
-                }
+        String location = getMessageKey();
 
-                @Override
-                public void onCancelled(DatabaseError error) {
-                    // Failed to read value
-                    //Log.w(TAG, "Failed to read value.", error.toException());
-                }
-            });
+        if (location != null) {
+            Toast.makeText(getApplicationContext(), "Loading messages from lat-long: " + location, Toast.LENGTH_LONG).show();
+
+            for (int i = 0; i < MAX_MSG; i++) {
+                String entry = location + "/" + i;
+                database = FirebaseDatabase.getInstance();
+                databaseReference = database.getReference(entry);
+                databaseReference.addValueEventListener(new ValueEventListener() {
+
+                    @Override
+                    public void onDataChange(DataSnapshot dataSnapshot) {
+                        String s = (String) dataSnapshot.getValue(String.class);
+                        if (s != null && s.length() > 0) {
+                            postMessage(s);
+                        }
+                    }
+
+                    @Override
+                    public void onCancelled(DatabaseError error) {
+                        // Failed to read value
+                        //Log.w(TAG, "Failed to read value.", error.toException());
+                    }
+                });
+            }
         }
     }
 
 
-
-    private void setLocation() {
-        //return MSGKEY;
+    private boolean setLocation() {
         String location = getMessageKey();
-        location += msgCount;
 
-        try {
-            database = FirebaseDatabase.getInstance();
-            databaseReference = database.getReference(location);
-        } catch(Exception e) {
-            Toast.makeText(this, "Database exception caught!" , Toast.LENGTH_LONG);
-            Toast.makeText(this, e.toString(), Toast.LENGTH_LONG);
+        if(location != null) {
+            location += "/" + msgCount;
+
+            try {
+                database = FirebaseDatabase.getInstance();
+                databaseReference = database.getReference(location);
+                return true;
+            } catch (Exception e) {
+                Toast.makeText(this, "Database exception caught!", Toast.LENGTH_LONG);
+                Toast.makeText(this, e.toString(), Toast.LENGTH_LONG);
+                return false;
+            }
+        } else {
+            return false;
         }
     }
 
     private String getMessageKey() {
-        // idealy, this will return lat/long as a string.
-        return DEFAULT_LOCATION;
+        double currentLat, currentLong;
+        currentLat = currentLong = 0;
+
+        if(locationProvided) {
+            try {
+                LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+                Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                currentLat = location.getLatitude();
+                currentLong = location.getLongitude();
+            } catch (SecurityException e) {
+                locationProvided = false;
+            }
+        } else {
+            Toast toast = Toast.makeText(getApplicationContext(),
+                    "Please enable location services for this app!",
+                    Toast.LENGTH_SHORT);
+
+            toast.show();
+
+            locationProvided = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        }
+        String locationKey = null;
+
+        if(currentLat != 0 && currentLong != 0) {
+            //locationKey = Double.toString(currentLat) + Double.toString(currentLong);
+            locationKey = Double.toHexString(currentLat) + Double.toHexString(currentLong);
+        } else {
+            locationKey = DEFAULT_LOCATION;
+        }
+
+        return locationKey;
+        //return DEFAULT_LOCATION;
     }
 
 
