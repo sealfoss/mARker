@@ -3,6 +3,7 @@ package com.infinitemonkey.marker;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Context;
+import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -95,11 +96,10 @@ public class MainActivity extends AppCompatActivity {
     FirebaseDatabase database;
     private DatabaseReference databaseReference;
 
-    // maps stuff
-    Location mBestReading = null;
-    LocationManager mLocationManager = null;
-    LocationListener mLocationListener = null;
-    boolean locationProvided = false;
+    // location stuff
+    public LocationManager locationManager;
+    public Criteria criteria;
+    public String bestProvider;
 
 
     @Override
@@ -187,13 +187,11 @@ public class MainActivity extends AppCompatActivity {
                 onPost();
             }
         });
-        postButton.setEnabled(false);
+        //postButton.setEnabled(false);
         textInput = findViewById(R.id.text_input);
         initViewRenderables();
 
         database = FirebaseDatabase.getInstance();
-        mLocationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        locationProvided = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
     }
 
 
@@ -311,15 +309,9 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void onPost() {
-        sendToServer();
-        /*
-        String l = getMessageKey();
-        if(l!=null) {
-            Toast.makeText(this, "Location: " + l, Toast.LENGTH_LONG).show();
-        } else {
-            Toast.makeText(this, "Location Not Found ", Toast.LENGTH_LONG).show();
-        }
-         */
+        //sendToServer();
+        String key = getMessageKey();
+        Toast.makeText(this, "Location Key: " + key, Toast.LENGTH_LONG).show();
     }
 
     private void postMessage(String messageText) {
@@ -529,25 +521,6 @@ public class MainActivity extends AppCompatActivity {
         if(setLocation()) {
             databaseReference.setValue(messageText);
         }
-
-        /*
-        databaseReference.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                String value = dataSnapshot.getValue(String.class);
-                Toast.makeText(getApplicationContext(), "Message from server: " + value, Toast.LENGTH_LONG).show();
-                //updateList(value);
-                postMessage(value);
-            }
-
-            @Override
-            public void onCancelled(DatabaseError error) {
-                // Failed to read value
-                System.out.println("Failed to read value. " + error.toException());
-            }
-        });
-
-         */
     }
 
     private void initValues() {
@@ -605,35 +578,40 @@ public class MainActivity extends AppCompatActivity {
         double currentLat, currentLong;
         currentLat = currentLong = 0;
 
-        if(locationProvided) {
-            try {
-                LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-                Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        try {
+            LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+            Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if(location != null) {
                 currentLat = location.getLatitude();
                 currentLong = location.getLongitude();
-            } catch (SecurityException e) {
-                locationProvided = false;
+                Toast.makeText(getApplicationContext(),
+                        "Setting location to " + currentLat + ", " + currentLong,
+                        Toast.LENGTH_SHORT).show();
+            } else {
+
             }
-        } else {
-            Toast toast = Toast.makeText(getApplicationContext(),
+        } catch (SecurityException e) {
+            Toast.makeText(getApplicationContext(),
                     "Please enable location services for this app!",
-                    Toast.LENGTH_SHORT);
-
-            toast.show();
-
-            locationProvided = mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+                    Toast.LENGTH_SHORT).show();
         }
+
         String locationKey = null;
 
         if(currentLat != 0 && currentLong != 0) {
-            //locationKey = Double.toString(currentLat) + Double.toString(currentLong);
-            locationKey = Double.toHexString(currentLat) + Double.toHexString(currentLong);
+            locationKey = Double.toString(currentLat) + Double.toString(currentLong);
+            locationKey.replace(".", "");
         } else {
             locationKey = DEFAULT_LOCATION;
         }
 
         return locationKey;
         //return DEFAULT_LOCATION;
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        setLocation();
     }
 
 
