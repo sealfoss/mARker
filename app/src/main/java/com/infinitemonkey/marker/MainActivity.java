@@ -13,7 +13,6 @@ import androidx.annotation.NonNull;
 //import android.support.design.widget.Snackbar;
 import com.google.android.material.snackbar.Snackbar;
 //import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -38,7 +37,6 @@ import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.ArSceneView;
 import com.google.ar.sceneform.HitTestResult;
 import com.google.ar.sceneform.Node;
-import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.rendering.ViewRenderable;
 
@@ -48,16 +46,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 
-import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.Query;
 import com.google.firebase.database.ValueEventListener;
 
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements LocationListener{
     private static final int RC_PERMISSIONS = 0x123;
     private boolean cameraPermissionRequested;
 
@@ -100,6 +96,8 @@ public class MainActivity extends AppCompatActivity {
     public LocationManager locationManager;
     public Criteria criteria;
     public String bestProvider;
+    private boolean locationAvailable = true;
+    private boolean dbSync = false;
 
 
     @Override
@@ -183,11 +181,10 @@ public class MainActivity extends AppCompatActivity {
         postButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v)
             {
-                //DO SOMETHING! {RUN SOME FUNCTION ... DO CHECKS... ETC}
                 onPost();
             }
         });
-        //postButton.setEnabled(false);
+        postButton.setEnabled(false);
         textInput = findViewById(R.id.text_input);
         initViewRenderables();
 
@@ -236,55 +233,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
-    public void onPause() {
-        super.onPause();
-        if (arSceneView != null) {
-            arSceneView.pause();
-        }
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        if (arSceneView != null) {
-            arSceneView.destroy();
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(
-            int requestCode, @NonNull String[] permissions, @NonNull int[] results) {
-        if (!DemoUtils.hasCameraPermission(this)) {
-            if (!DemoUtils.shouldShowRequestPermissionRationale(this)) {
-                // Permission denied with checking "Do not ask again".
-                DemoUtils.launchPermissionSettings(this);
-            } else {
-                Toast.makeText(
-                        this, "Camera permission is needed to run this application", Toast.LENGTH_LONG)
-                        .show();
-            }
-            finish();
-        }
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            // Standard Android full-screen functionality.
-            getWindow()
-                    .getDecorView()
-                    .setSystemUiVisibility(
-                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                                    | View.SYSTEM_UI_FLAG_FULLSCREEN
-                                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        }
-    }
 
     /* BEGIN AR CORE STUFF */
 
@@ -309,9 +257,9 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void onPost() {
-        //sendToServer();
-        String key = getMessageKey();
-        Toast.makeText(this, "Location Key: " + key, Toast.LENGTH_LONG).show();
+        sendToServer();
+        //String key = getLocationKey();
+        //Toast.makeText(this, "Location Key: " + key, Toast.LENGTH_LONG).show();
     }
 
     private void postMessage(String messageText) {
@@ -385,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
                     anchorNode = new AnchorNode(anchor);
                     anchorNode.setParent(arSceneView.getScene());
                     created = true;
-                    initValues();
+                    syncDB();
                     break;
                 }
             }
@@ -393,31 +341,6 @@ public class MainActivity extends AppCompatActivity {
         return created;
     }
 
-
-
-    private void showLoadingMessage() {
-        if (loadingMessageSnackbar != null && loadingMessageSnackbar.isShownOrQueued()) {
-            return;
-        }
-
-        loadingMessageSnackbar =
-                Snackbar.make(
-                        MainActivity.this.findViewById(android.R.id.content),
-                        "Once surfaces have been located, tap the screen to show and add messages...",
-                        Snackbar.LENGTH_INDEFINITE);
-        loadingMessageSnackbar.getView().setBackgroundColor(0xbf323232);
-        loadingMessageSnackbar.show();
-    }
-
-
-    private void hideLoadingMessage() {
-        if (loadingMessageSnackbar == null) {
-            return;
-        }
-
-        loadingMessageSnackbar.dismiss();
-        loadingMessageSnackbar = null;
-    }
 
     private void initViewRenderables() {
         LinearLayout layout = new LinearLayout(this);
@@ -523,8 +446,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void initValues() {
-        String location = getMessageKey();
+    private void syncDB() {
+        String location = getLocationKey();
 
         if (location != null) {
             Toast.makeText(getApplicationContext(), "Loading messages from lat-long: " + location, Toast.LENGTH_LONG).show();
@@ -551,11 +474,12 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         }
+        dbSync = true;
     }
 
 
     private boolean setLocation() {
-        String location = getMessageKey();
+        String location = getLocationKey();
 
         if(location != null) {
             location += "/" + msgCount;
@@ -574,45 +498,158 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String getMessageKey() {
+    private String getLocationKey() {
         double currentLat, currentLong;
         currentLat = currentLong = 0;
 
-        try {
-            LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-            Location location = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if(location != null) {
-                currentLat = location.getLatitude();
-                currentLong = location.getLongitude();
-                Toast.makeText(getApplicationContext(),
-                        "Setting location to " + currentLat + ", " + currentLong,
-                        Toast.LENGTH_SHORT).show();
-            } else {
+        if(locationAvailable) {
+            try {
+                locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+                criteria = new Criteria();
+                bestProvider = String.valueOf(locationManager.getBestProvider(criteria, true)).toString();
+                Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+                if (location != null) {
+                    currentLat = location.getLatitude();
+                    currentLong = location.getLongitude();
+                    Toast.makeText(getApplicationContext(),
+                            "Setting location to " + currentLat + ", " + currentLong,
+                            Toast.LENGTH_SHORT).show();
+                } else {
+                    locationAvailable = false;
+                    locationManager.requestLocationUpdates(bestProvider,1000,0,this);
+                    return null;
+                }
+            } catch (SecurityException e) {
 
             }
-        } catch (SecurityException e) {
-            Toast.makeText(getApplicationContext(),
-                    "Please enable location services for this app!",
-                    Toast.LENGTH_SHORT).show();
-        }
+            String locationKey = null;
 
-        String locationKey = null;
+            if(currentLat != 0 && currentLong != 0) {
+                locationKey = Double.toString(currentLat) + Double.toString(currentLong);
+                locationKey = locationKey.replace(".", "");
+            } else {
+                locationKey = DEFAULT_LOCATION;
+            }
 
-        if(currentLat != 0 && currentLong != 0) {
-            locationKey = Double.toString(currentLat) + Double.toString(currentLong);
-            locationKey.replace(".", "");
+            return locationKey;
+            //return DEFAULT_LOCATION;
         } else {
-            locationKey = DEFAULT_LOCATION;
+            Toast.makeText(this,
+                    "Waiting for location services to become available.",
+                    Toast.LENGTH_LONG)
+                    .show();
+            return null;
         }
-
-        return locationKey;
-        //return DEFAULT_LOCATION;
     }
 
     @Override
     public void onLocationChanged(Location location) {
+        locationAvailable = true;
         setLocation();
+        if(!dbSync) {
+            syncDB();
+        }
     }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
+
+    public void searchNearestPlace(String v2txt) {
+        //.....
+    }
+
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (arSceneView != null) {
+            arSceneView.pause();
+        }
+        if(locationManager!= null) {
+            locationManager.removeUpdates(this);
+        }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (arSceneView != null) {
+            arSceneView.destroy();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode, @NonNull String[] permissions, @NonNull int[] results) {
+        if (!DemoUtils.hasCameraPermission(this)) {
+            if (!DemoUtils.shouldShowRequestPermissionRationale(this)) {
+                // Permission denied with checking "Do not ask again".
+                DemoUtils.launchPermissionSettings(this);
+            } else {
+                Toast.makeText(
+                        this, "Camera permission is needed to run this application", Toast.LENGTH_LONG)
+                        .show();
+            }
+            finish();
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            // Standard Android full-screen functionality.
+            getWindow()
+                    .getDecorView()
+                    .setSystemUiVisibility(
+                            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+
+
+    private void showLoadingMessage() {
+        if (loadingMessageSnackbar != null && loadingMessageSnackbar.isShownOrQueued()) {
+            return;
+        }
+
+        loadingMessageSnackbar =
+                Snackbar.make(
+                        MainActivity.this.findViewById(android.R.id.content),
+                        "Once surfaces have been located, tap the screen to show and add messages...",
+                        Snackbar.LENGTH_INDEFINITE);
+        loadingMessageSnackbar.getView().setBackgroundColor(0xbf323232);
+        loadingMessageSnackbar.show();
+    }
+
+
+    private void hideLoadingMessage() {
+        if (loadingMessageSnackbar == null) {
+            return;
+        }
+
+        loadingMessageSnackbar.dismiss();
+        loadingMessageSnackbar = null;
+    }
+
 
 
     /* END FIREBASE STUFF */
