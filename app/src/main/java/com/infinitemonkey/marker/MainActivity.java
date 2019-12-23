@@ -1,3 +1,19 @@
+/**
+ * App Name: maRker
+ * Author: William Foss
+ *
+ * For the CS477 Course Project
+ * Dec 6, 2019
+ *
+ * This project borrows _heavily_ from the AR Sceneform example "SolarSystem",
+ * released by Google under Apache License and available here:
+ * https://developers.google.com/ar/develop/java/sceneform/samples
+ *
+ */
+
+
+
+
 package com.infinitemonkey.marker;
 
 import androidx.appcompat.app.AppCompatActivity;
